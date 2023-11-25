@@ -1,5 +1,0 @@
-#define PORT 8080
-#define MAX_SIZE 1024
-#define IP_ADDRESS "local"
-#define MESSAGE_SIZE_LENGTH 20
-#define MESSAGE_CONTENT_LENGTH 1004

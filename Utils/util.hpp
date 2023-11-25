@@ -1,7 +1,7 @@
 #ifndef UTILITIES
 #define UTILITIES
 
-#include "../Headers/builtin.hpp"
+#include "../headers.hpp"
 using namespace std;
 
 // Binary Exponetiation with Modulus
@@ -42,29 +42,9 @@ ll getRandomPrime(ll mod) {
 }
 
 // Display Error
-void err(string s)
-{
+void err(string s) {
     perror(s.c_str());
     exit(1);
-}
-
-// Parse the String
-vector<string> parseTheString(string &s, char delimiter)
-{
-    vector<string> res;
-    string curr;
-    for (auto x : s)
-    {
-        if (x == delimiter)
-        {
-            res.push_back(curr);
-            curr = "";
-        }
-        else
-            curr += x;
-    }
-    res.push_back(curr);
-    return res;
 }
 
 #endif

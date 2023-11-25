@@ -1,17 +1,18 @@
 #include "Utils/dh.hpp"
 #include "Utils/rc4.hpp"
 #include "Utils/prompt.hpp"
-#include "Sockets/comms.hpp"
-#include "Sockets/connector.hpp"
+#include "Sockets/Client.hpp"
 using namespace std;
 
-int sockfd;
+string username;
 ll privateKey;
 ll secretKey;
-string username;
 bool secure;
 
-// Remove Username
+// GLOBAL CLIENT OBJECT
+Client client(PORT, IP_ADDRESS);
+
+// UTILITY FUNCTIONS
 string removeUsername(string msg) {
   string name;
   int i = 0;
@@ -21,119 +22,137 @@ string removeUsername(string msg) {
   }
   i++;
   if (i >= msg.length()) {
-    string ex = msg;
-    rc4_crypt(ex, to_string(secretKey));
-    return ex;
+    // SERVER MESSAGE
+    string temp = msg;
+    encrypt(temp, to_string(secretKey));
+    return temp;
   }
   string newMsg = msg.substr(i);
-  cout << name << ": ";
+  if(newMsg != "goodbye" && newMsg != "close") {
+    cout << MAG << name << NRM << ": ";
+  }
   return newMsg;
 }
 
-// Receive Message
-void *receiveMsg(void *arg) {
-  int sockfd = *((int *)arg);
-  while (true) {
-    comms comm(sockfd);
-    string msg = comm.receive();
-    if (secure) {
-      msg = removeUsername(msg);
-      rc4_crypt(msg, to_string(secretKey));
-    }
-    if (msg == "close") {
-      cout << "Server closed the connection." << endl;
-      exit(0);
-    } else if (msg == "goodbye") {
-      secure = false;
-      secretKey = 0;
-      continue;
-    } else if (msg == "handshake") {
-      privateKey = getPrivateKey();
-      comm.sendMessage("key " + to_string(createPublicKey(privateKey)));
-      continue;
-    } else if (msg == "keys") {
-      string B = comm.receive();
-      secretKey = createSecretKey(stoll(B), privateKey);
-      secure = true;
-      continue;
-    }
-    cout << msg << endl;
-  }
-}
-
-// Send Message
-void *sendMsg(void *arg) {
-  int sockfd = *((int *)arg);
-  while (true) {
-    string msg;
-    getline(cin, msg);
-    string prompt = "     [" + username + "]: ";
-    if (msg.size())
-      cout << GOUP << left << CYN << prompt << MAG << msg << NRM << endl;
-    if (msg == "clear") {
-      cout << CLR;
-      continue;
-    }
-    comms comm(sockfd);
-    if (secure) {
-      if (msg != "goodbye" && msg != "close")
-        rc4_crypt(msg, to_string(secretKey));
-    }
-    comm.sendMessage(msg);
-    sleep(0.1);
-    if (msg == "close")
-      exit(0);
-  }
-}
-
-// Exit Handler
-void exit_handler(int sig) {
-  comms comm(sockfd);
-  comm.sendMessage("close");
-  comm.disconnect();
-  exit(0);
-}
-
-// Get Public Keys
 void getPublicKeys(string s) {
-  string strG, strP;
-  int i = 0;
-  while (i < s.length() && s[i] != ' ') {
-    strG.push_back(s[i]);
-    i++;
-  }
-  i++;
-  while (i < s.length() && s[i] != ' ') {
-    strP.push_back(s[i]);
-    i++;
+  string strG = "", strP = "";
+  bool genP = false;
+  for(int i = 0; i < s.size(); i++) {
+    if(s[i] == ' ') {
+      genP = true;
+    }
+    if(genP) {
+      strG += s[i];
+    }
+    else {
+      strP += s[i];
+    }
   }
   setPrimitiveKeys(stoll(strG), stoll(strP));
 }
 
-// Main Function
-int main(int argc, char **argv) {
+void exitHandler(int sig) {
+  client.sendMessage("close");
+  client.disconnect();
+  exit(0);
+}
+
+// MESSAGE HANDLERS
+void *receiver(void *arg) {
+  while (true) {
+
+    string message = client.receiveMessage();
+    if (secure) {
+      message = removeUsername(message);
+      if(message != "goodbye" && message != "close" && message != "handshake" && message != "keys") {
+        encrypt(message, to_string(secretKey));
+      }
+    }
+
+    if (message == "close" ) {
+      cout << "Server closed the connection." << endl;
+      exit(0);
+    } 
+    
+    else if (message == "goodbye") {
+      secure = false;
+      secretKey = 0;
+      continue;
+    } 
+    
+    else if (message == "handshake") {
+      privateKey = getPrivateKey();
+      client.sendMessage("key " + to_string(createPublicKey(privateKey)));
+      continue;
+    } 
+    
+    else if (message == "keys") {
+      string B = client.receiveMessage();
+      secretKey = createSecretKey(stoll(B), privateKey);
+      secure = true;
+      continue;
+    }
+
+    cout << message << endl;
+  }
+}
+
+void *sender(void *arg) {
+  while (true) {
+    string message;
+    getline(cin, message);
+    string user = "[" + username + "]: ";
+    if (message.size()) {
+      cout << GOUP << left << CYN << user << NRM << message << endl;
+    }
+    if (message == "clear") {
+      cout << CLR;
+      continue;
+    }
+    if (secure && message != "status" && message != "goodbye" && message != "close") {
+      encrypt(message, to_string(secretKey));
+    }
+    client.sendMessage(message);
+    // sleep(0.1);
+    if (message == "close") {
+      exit(0);
+    }
+  }
+}
+
+int main() {
   srand(time(NULL));
+  signal(SIGINT, exitHandler);
+  
+  // CONNECT TO SERVER
+  client.connectServer();
+  cout <<GRN<<"Connected to server."<<NRM<<endl;
+  getPublicKeys(client.receiveMessage());
+
+  // RECEIVE A VALID USERNAME: ONE THAT DOES NOT EXIST
+  int redo = 0;
+  do {
+    if(redo == 1) {
+      cout<<"Username Already Exists!"<<endl;
+    }
+    cout << "Enter username: ";
+    cin >> username;
+    client.sendMessage(username);
+    if(redo == 0) {
+      redo++;
+    }
+  } while(client.receiveMessage() == "REDO USERNAME.\n");
+  
+  // PRINT THE WELCOME MESSAGE AND SHOW INSTRUCTIONS
+  cout<<GRN<<"Username Accepted"<<NRM<<endl;
+  cout<<readme(username)<<endl;
+
+  // USE SEPARATE THREADS TO RECEIVE AND SEND MESSAGES 
   pthread_t receive_t, send_t;
-  string ip_address = "local";
-
-  connector client(0, PORT, ip_address);
-
-  // Singal Handling:
-  signal(SIGINT, exit_handler);
-
-  // Client side:
-  sockfd = client.connectToServer();
-  cout << "Connected to server." << endl;
-  comms comm(sockfd);
-  getPublicKeys(comm.receive());
-  cout << "Enter your username: ";
-  cin >> username;
-  comm.sendMessage(username);
-  cout << readme(username);
-  pthread_create(&receive_t, NULL, receiveMsg, &sockfd);
-  pthread_create(&send_t, NULL, sendMsg, &sockfd);
+  pthread_create(&receive_t, NULL, receiver, NULL);
+  pthread_create(&send_t, NULL, sender, NULL);
   pthread_join(receive_t, NULL);
   pthread_join(send_t, NULL);
-  comm.disconnect();
+  client.disconnect();
   return 0;
 }

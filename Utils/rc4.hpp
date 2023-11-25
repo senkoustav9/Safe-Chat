@@ -1,4 +1,4 @@
-#include "../Headers/builtin.hpp"
+#include "../headers.hpp"
 using namespace std;
 
 // Key Scheduling Algorithm
@@ -23,7 +23,7 @@ int pgra(array<int, 256> &S, int &i, int &j) {
 }
 
 // Encrypt or Decrypt
-void rc4_crypt(string &data, const string &key) {
+void encrypt(string &data, const string &key) {
     if (key.length() > 256) {
         cout << "Key size shouldn't be more than 256" << endl;
         exit(1);
