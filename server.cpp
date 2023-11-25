@@ -177,7 +177,7 @@ void *clientHandler(void *arg) {
         }
         else if (parsedMsg[0] == "key") {
             string A = parsedMsg[1];
-            server.sendMessage(usernames[partner[username]],"keys ");
+            server.sendMessage(usernames[partner[username]],"keys");
             server.sendMessage(usernames[partner[username]], A);
         }
         else if (parsedMsg[0] == "close") {
